@@ -196,9 +196,25 @@ if __name__ == '__main__':
     
     # evaluation 
     if args.eval:
-        file_eval = genSpoof_list( dir_meta =  os.path.join(args.protocols_path+'{}_cm_protocols/{}.cm.eval.trl.txt'.format(prefix,prefix_2021)),is_train=False,is_eval=True)
-        print('no. of eval trials',len(file_eval))
-        eval_set=Dataset_ASVspoof2021_eval(list_IDs = file_eval,base_dir = os.path.join(args.database_path+'ASVspoof2021_{}_eval/'.format(args.track)))
+        # edit+++++++
+        # original:
+        # file_eval = genSpoof_list( dir_meta =  os.path.join(args.protocols_path+'{}_cm_protocols/{}.cm.eval.trl.txt'.format(prefix,prefix_2021)),is_train=False,is_eval=True)
+        # print('no. of eval trials',len(file_eval))
+        file_eval_all = genSpoof_list(dir_meta=os.path.join(args.protocols_path+'{}_cm_protocols/{}.cm.eval.trl.txt'.format(prefix,prefix_2021)), is_train=False, is_eval=True)
+        eval_base_dir = os.path.join(args.database_path+'ASVspoof2021_{}_eval/'.format(args.track))
+        eval_flac_dir = os.path.join(eval_base_dir, 'flac')
+        file_eval = []
+        for utt_id in file_eval_all:
+            if os.path.isfile(os.path.join(eval_flac_dir, utt_id + '.flac')):
+                file_eval.append(utt_id)
+                if len(file_eval) >= 1000:
+                    break
+        print('no. of eval trials (requested)', 1000)
+        print('no. of eval trials (found on disk)', len(file_eval))
+        if len(file_eval) == 0:
+            raise FileNotFoundError('No evaluation FLAC files found under {}'.format(eval_flac_dir))
+        # edit+++++++
+        eval_set=Dataset_ASVspoof2021_eval(list_IDs = file_eval,base_dir = eval_base_dir)
         produce_evaluation_file(eval_set, model, device, args.eval_output)
         sys.exit(0)
 
@@ -241,3 +257,21 @@ if __name__ == '__main__':
             print('best model find at epoch', epoch)
         best_acc = max(valid_accuracy, best_acc)
         torch.save(model.state_dict(), os.path.join(model_save_path, 'epoch_{}.pth'.format(epoch)))
+
+
+# protocal path example:
+# /tmp2/xwang1/datasets/ASVspoof2019/PA/ASVspoof_PA_cm_protocols/ASVspoof2021.PA.cm.eval.trl.txt
+# this 2021 is only contains the 00.tar, not all the eve data. the full key is stored in the same folder.
+# only evel 1000 trials are used for evaluation to speed up the process. you can change it to all the eval trials if you want.
+# command to use pretrained model for evaluation on ASVspoof2021 PA eval set (change the paths and model checkpoint as needed):
+
+# bsub -q gpu -R "select[(ostype=='any')]" \
+# -gpu num=1:gmem=10000:gmodel=NVIDIAL40S:mode=shared:j_exclusive=yes \
+# -o eval_output.log -e eval_error.log -J PA_eval \
+# python main.py \
+#   --database_path /tmp2/xwang1/datasets/ASVspoof2019/PA/ \
+#   --protocols_path /tmp2/xwang1/datasets/ASVspoof2019/PA/ \
+#   --track PA \
+#   --eval \
+#   --model_path /tmp2/xwang1/models/pre_trained_DF_RawNet2.pth \
+#   --eval_output results/eval_scores1.txt
